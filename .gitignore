@@ -8,5 +8,5 @@ build
 !.env.example
 *.log
 coverage
-reports/
-.talent-scout/
+/reports/
+/.talent-scout/
