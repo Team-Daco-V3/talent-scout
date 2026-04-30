@@ -16,7 +16,6 @@
     CandidateSearchAttempt,
     EvaluatedCandidate,
     FitRunResult,
-    HiringWorkflow,
     LinkInsight
   } from '$lib/fit/types';
   import type { ScoutReport, ScoutReportConfig, ScoutReportSummary } from '$lib/reports/types';
@@ -26,7 +25,6 @@
     deleteScout,
     duplicateScout,
     mergedCandidatesToResult,
-    migrateLegacyScout,
     queueScoutRuns,
     resetScoutRun,
     startableScoutIds,
@@ -96,8 +94,7 @@
     candidate: ReportCandidate;
   }
 
-  const workspaceStorageKey = 'markidy-fit-multi-scout-v1';
-  const legacyWorkflowStorageKey = 'markidy-fit-workflow-v1';
+  const workspaceStorageKey = 'talent-scout-workspace-v1';
   const maxConcurrentScouts = 2;
   const fallbackMarkidyApiUrl = 'https://api.markidy.com';
   const fallbackAiProvider: AiProviderId = 'openai';
@@ -327,26 +324,7 @@
       }
     }
 
-    const legacyStored = sessionStorage.getItem(legacyWorkflowStorageKey);
-    if (!legacyStored) return;
-
-    try {
-      const legacy = JSON.parse(legacyStored) as Partial<HiringWorkflow> & PersistedWorkspace;
-      markidyApiUrl = legacy.markidyApiUrl || fallbackMarkidyApiUrl;
-      markidyApiKey = legacy.markidyApiKey || '';
-      aiProvider = normalizeAiProvider(legacy.aiProvider);
-      aiApiKey = legacy.aiApiKey || '';
-      aiBaseUrl = legacy.aiBaseUrl || getAiProviderPreset(aiProvider).defaultBaseUrl || fallbackAiBaseUrl;
-      aiModel = legacy.aiModel || getAiProviderPreset(aiProvider).defaultModel || fallbackAiModel;
-
-      const migrated = migrateLegacyScout('scout-1', legacy as Partial<HiringWorkflow>);
-      scouts = [migrated ?? createScout('scout-1', 1)];
-      selectedScoutId = scouts[0].id;
-      showToast('Previous single-scout setup was migrated.', 'success');
-      persistWorkspace();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Failed to migrate previous setup.', 'error');
-    }
+    persistWorkspace();
   }
 
   function patchScouts(nextScouts: ScoutState[], message?: string) {
