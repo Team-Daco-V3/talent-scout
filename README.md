@@ -10,6 +10,12 @@ It helps recruiters, founders, and hiring managers search Markidy profiles, eval
 
 It is not a final hiring decision system. It does not send messages, run chats, or make automated employment decisions.
 
+## Demo
+
+[![Watch the Talent Scout demo](https://img.youtube.com/vi/d4U0JhdhdOM/hqdefault.jpg)](https://youtu.be/d4U0JhdhdOM)
+
+Watch the demo on YouTube: https://youtu.be/d4U0JhdhdOM
+
 ## Requirements
 
 You need:
