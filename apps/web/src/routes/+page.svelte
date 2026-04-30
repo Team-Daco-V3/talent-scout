@@ -59,6 +59,7 @@
     | { type: 'error'; message: string };
 
   interface PersistedWorkspace {
+    savedAt?: string;
     markidyApiUrl?: string;
     markidyApiKey?: string;
     aiProvider?: string;
@@ -95,6 +96,7 @@
   }
 
   const workspaceStorageKey = 'talent-scout-workspace-v1';
+  const workspaceLocalStorageKey = 'talent-scout-workspace-local-v1';
   const maxConcurrentScouts = 2;
   const fallbackMarkidyApiUrl = 'https://api.markidy.com';
   const fallbackAiProvider: AiProviderId = 'openai';
@@ -216,6 +218,7 @@
 
   function workspaceFilePayload(payload = workspaceSessionPayload()): PersistedWorkspace {
     return {
+      savedAt: payload.savedAt,
       markidyApiUrl: payload.markidyApiUrl,
       aiProvider: payload.aiProvider,
       aiBaseUrl: payload.aiBaseUrl,
@@ -240,6 +243,13 @@
     };
   }
 
+  function workspaceLocalPayload(payload = workspaceSessionPayload()): PersistedWorkspace {
+    return {
+      ...workspaceFilePayload(payload),
+      savedAt: new Date().toISOString()
+    };
+  }
+
   function saveWorkspaceSession(payload: PersistedWorkspace) {
     if (typeof sessionStorage === 'undefined') return;
 
@@ -247,6 +257,16 @@
       sessionStorage.setItem(workspaceStorageKey, JSON.stringify(payload));
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to save workspace.', 'error');
+    }
+  }
+
+  function saveWorkspaceLocal(payload: PersistedWorkspace) {
+    if (typeof localStorage === 'undefined') return;
+
+    try {
+      localStorage.setItem(workspaceLocalStorageKey, JSON.stringify(workspaceLocalPayload(payload)));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to save local workspace backup.', 'error');
     }
   }
 
@@ -287,6 +307,7 @@
   function persistWorkspace(message?: string) {
     const payload = workspaceSessionPayload();
     saveWorkspaceSession(payload);
+    saveWorkspaceLocal(payload);
     scheduleWorkspaceFileSave(payload, message);
   }
 
@@ -355,6 +376,32 @@
     }
   }
 
+  function readLocalWorkspace(): PersistedWorkspace | null {
+    if (typeof localStorage === 'undefined') return null;
+    const stored = localStorage.getItem(workspaceLocalStorageKey);
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as PersistedWorkspace;
+    } catch {
+      return null;
+    }
+  }
+
+  function workspaceSavedAt(workspace: PersistedWorkspace | null | undefined) {
+    if (!workspace?.savedAt) return 0;
+    const value = Date.parse(workspace.savedAt);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function newestWorkspace(
+    fileWorkspace: PersistedWorkspace | null | undefined,
+    localWorkspace: PersistedWorkspace | null | undefined
+  ) {
+    if (!fileWorkspace) return localWorkspace ?? null;
+    if (!localWorkspace) return fileWorkspace;
+    return workspaceSavedAt(localWorkspace) > workspaceSavedAt(fileWorkspace) ? localWorkspace : fileWorkspace;
+  }
+
   function applyWorkspace(parsed: PersistedWorkspace) {
     markidyApiUrl = parsed.markidyApiUrl || fallbackMarkidyApiUrl;
     markidyApiKey = parsed.markidyApiKey || '';
@@ -393,6 +440,8 @@
 
   async function loadWorkspace() {
     const sessionWorkspace = readSessionWorkspace();
+    const localWorkspace = readLocalWorkspace();
+    let fileWorkspace: PersistedWorkspace | null = null;
     try {
       const response = await fetch('/api/workspace');
       const payload = (await response.json().catch(() => ({}))) as {
@@ -404,24 +453,28 @@
         throw new Error(payload.error || 'Failed to load workspace file.');
       }
 
-      if (payload.workspace) {
-        applyWorkspace({
-          ...payload.workspace,
-          markidyApiKey: sessionWorkspace?.markidyApiKey || '',
-          aiApiKey: sessionWorkspace?.aiApiKey || ''
-        });
-        saveWorkspaceSession(workspaceSessionPayload());
-        if (!markidyApiKey || !aiApiKey) {
-          showToast('Workspace restored. Paste API keys to run scouts.', 'info', 6000);
-        }
-        return;
-      }
+      fileWorkspace = payload.workspace ?? null;
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to load workspace file.', 'error');
     }
 
-    if (sessionWorkspace) {
-      applyWorkspace(sessionWorkspace);
+    const restoredWorkspace = newestWorkspace(fileWorkspace, localWorkspace) ?? sessionWorkspace;
+
+    if (restoredWorkspace) {
+      applyWorkspace({
+        ...restoredWorkspace,
+        markidyApiKey: sessionWorkspace?.markidyApiKey || '',
+        aiApiKey: sessionWorkspace?.aiApiKey || ''
+      });
+      const currentPayload = workspaceSessionPayload();
+      saveWorkspaceSession(currentPayload);
+      saveWorkspaceLocal(currentPayload);
+      if (!fileWorkspace || workspaceSavedAt(restoredWorkspace) > workspaceSavedAt(fileWorkspace)) {
+        scheduleWorkspaceFileSave(currentPayload);
+      }
+      if (!markidyApiKey || !aiApiKey) {
+        showToast('Workspace restored. Paste API keys to run scouts.', 'info', 6000);
+      }
       return;
     }
 
