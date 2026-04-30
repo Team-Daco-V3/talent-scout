@@ -1,0 +1,18 @@
+{
+  "name": "markidy-fit",
+  "version": "0.1.0",
+  "description": "Talent scouting and reporting for Markidy profiles.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "start": "npm run dev -w apps/web -- --host 127.0.0.1 --port 50224 --open",
+    "dev": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/web",
+    "check": "npm run check -w apps/web",
+    "test": "npm run test -w apps/web"
+  }
+}
