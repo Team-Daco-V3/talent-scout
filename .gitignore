@@ -9,3 +9,4 @@ build
 *.log
 coverage
 reports/
+.talent-scout/

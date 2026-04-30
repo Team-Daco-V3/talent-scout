@@ -93,6 +93,15 @@ Talent Scout saves completed reports as JSON files in the project `reports/` fol
 - API keys and AI keys are not written into report files.
 - The `reports/` folder is ignored by git.
 
+## Workspace Storage
+
+Talent Scout saves scout setup and non-secret app settings in `.talent-scout/workspace.json`.
+
+- Scout names, search criteria, selected AI provider, model, and API base URLs are restored after app restart.
+- Markidy API keys and AI provider API keys are not saved to this file.
+- API keys only stay in the current browser session and must be pasted again after the browser session ends.
+- The `.talent-scout/` folder is ignored by git.
+
 ## What v1 Does
 
 - Validates a Markidy API key through `/v1/me/channels`

@@ -69,7 +69,7 @@
     reportTab?: string;
     activeWorkspaceTab?: WorkspaceTab;
     suppressedReportRunKeys?: string[];
-    scouts?: ScoutState[];
+    scouts?: Partial<ScoutState>[];
   }
 
   interface ReportView {
@@ -102,6 +102,8 @@
   const fallbackAiModel = 'gpt-4o-mini';
 
   const abortControllers = new Map<string, AbortController>();
+
+  let workspaceFileSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   let activeWorkspaceTab: WorkspaceTab = 'setup';
   let reportTab: ReportTab = 'all';
@@ -164,7 +166,7 @@
   }
 
   onMount(() => {
-    loadWorkspace();
+    void loadWorkspace();
     void loadSavedReports();
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasActiveScoutRun()) return;
@@ -196,10 +198,8 @@
     };
   }
 
-  function persistWorkspace(message?: string) {
-    if (typeof sessionStorage === 'undefined') return;
-
-    const payload: PersistedWorkspace = {
+  function workspaceSessionPayload(): PersistedWorkspace {
+    return {
       markidyApiUrl,
       markidyApiKey,
       aiProvider,
@@ -212,15 +212,82 @@
       suppressedReportRunKeys,
       scouts
     };
+  }
+
+  function workspaceFilePayload(payload = workspaceSessionPayload()): PersistedWorkspace {
+    return {
+      markidyApiUrl: payload.markidyApiUrl,
+      aiProvider: payload.aiProvider,
+      aiBaseUrl: payload.aiBaseUrl,
+      aiModel: payload.aiModel,
+      selectedScoutId: payload.selectedScoutId,
+      reportTab: payload.reportTab,
+      activeWorkspaceTab: payload.activeWorkspaceTab,
+      suppressedReportRunKeys: payload.suppressedReportRunKeys,
+      scouts: (payload.scouts || []).map((scout, index) => ({
+        id: scout.id || `scout-${index + 1}`,
+        name: scout.name || `Scout ${index + 1}`,
+        roleSummary: scout.roleSummary || '',
+        idealCandidate: scout.idealCandidate || '',
+        minExperienceYears: scout.minExperienceYears || 0,
+        skills: scout.skills || '',
+        countries: scout.countries || [],
+        workModes: scout.workModes || [],
+        locations: scout.locations || '',
+        maxCandidates: scout.maxCandidates || 8,
+        searchAttemptsLimit: scout.searchAttemptsLimit || 6
+      }))
+    };
+  }
+
+  function saveWorkspaceSession(payload: PersistedWorkspace) {
+    if (typeof sessionStorage === 'undefined') return;
 
     try {
       sessionStorage.setItem(workspaceStorageKey, JSON.stringify(payload));
-      if (message) {
-        showToast(message, 'success');
-      }
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Failed to save workspace.', 'error');
     }
+  }
+
+  async function saveWorkspaceFile(payload: PersistedWorkspace, successMessage?: string) {
+    try {
+      const response = await fetch('/api/workspace', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(workspaceFilePayload(payload))
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || 'Failed to save workspace file.');
+      }
+      if (successMessage) showToast(successMessage, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to save workspace file.', 'error');
+    }
+  }
+
+  function scheduleWorkspaceFileSave(payload: PersistedWorkspace, successMessage?: string) {
+    if (workspaceFileSaveTimer) {
+      clearTimeout(workspaceFileSaveTimer);
+      workspaceFileSaveTimer = null;
+    }
+
+    if (successMessage) {
+      void saveWorkspaceFile(payload, successMessage);
+      return;
+    }
+
+    workspaceFileSaveTimer = setTimeout(() => {
+      workspaceFileSaveTimer = null;
+      void saveWorkspaceFile(payload);
+    }, 500);
+  }
+
+  function persistWorkspace(message?: string) {
+    const payload = workspaceSessionPayload();
+    saveWorkspaceSession(payload);
+    scheduleWorkspaceFileSave(payload, message);
   }
 
   function showToast(message: string, kind: ToastKind = 'info', durationMs?: number) {
@@ -277,51 +344,85 @@
     }
   }
 
-  function loadWorkspace() {
-    if (typeof sessionStorage === 'undefined') return;
-
+  function readSessionWorkspace(): PersistedWorkspace | null {
+    if (typeof sessionStorage === 'undefined') return null;
     const stored = sessionStorage.getItem(workspaceStorageKey);
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as PersistedWorkspace;
+    } catch {
+      return null;
+    }
+  }
 
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as PersistedWorkspace;
-        markidyApiUrl = parsed.markidyApiUrl || fallbackMarkidyApiUrl;
-        markidyApiKey = parsed.markidyApiKey || '';
-        aiProvider = normalizeAiProvider(parsed.aiProvider);
-        aiApiKey = parsed.aiApiKey || '';
-        aiBaseUrl = parsed.aiBaseUrl || getAiProviderPreset(aiProvider).defaultBaseUrl || fallbackAiBaseUrl;
-        aiModel = parsed.aiModel || getAiProviderPreset(aiProvider).defaultModel || fallbackAiModel;
-        activeWorkspaceTab =
-          parsed.activeWorkspaceTab === 'reports' || parsed.activeWorkspaceTab === 'scouts'
-            ? parsed.activeWorkspaceTab
-            : 'setup';
-        reportTab = parsed.reportTab || 'all';
-        suppressedReportRunKeys = Array.isArray(parsed.suppressedReportRunKeys)
-          ? parsed.suppressedReportRunKeys.map((key) => String(key)).filter(Boolean)
-          : [];
+  function applyWorkspace(parsed: PersistedWorkspace) {
+    markidyApiUrl = parsed.markidyApiUrl || fallbackMarkidyApiUrl;
+    markidyApiKey = parsed.markidyApiKey || '';
+    aiProvider = normalizeAiProvider(parsed.aiProvider);
+    aiApiKey = parsed.aiApiKey || '';
+    aiBaseUrl = parsed.aiBaseUrl || getAiProviderPreset(aiProvider).defaultBaseUrl || fallbackAiBaseUrl;
+    aiModel = parsed.aiModel || getAiProviderPreset(aiProvider).defaultModel || fallbackAiModel;
+    activeWorkspaceTab =
+      parsed.activeWorkspaceTab === 'reports' || parsed.activeWorkspaceTab === 'scouts'
+        ? parsed.activeWorkspaceTab
+        : 'setup';
+    reportTab = parsed.reportTab || 'all';
+    suppressedReportRunKeys = Array.isArray(parsed.suppressedReportRunKeys)
+      ? parsed.suppressedReportRunKeys.map((key) => String(key)).filter(Boolean)
+      : [];
 
-        const restoredScouts = Array.isArray(parsed.scouts)
-          ? parsed.scouts.map((scout, index) => {
-              const restored = createScout(scout.id || newScoutId(), index + 1, scout);
-              if (restored.status === 'running' || restored.status === 'queued') {
-                return {
-                  ...restored,
-                  status: 'stopped' as const,
-                  phase: 'Stopped after browser reload.'
-                };
-              }
-              return restored;
-            })
-          : [];
+    const restoredScouts = Array.isArray(parsed.scouts)
+      ? parsed.scouts.map((scout, index) => {
+          const restored = createScout(scout.id || newScoutId(), index + 1, scout);
+          if (restored.status === 'running' || restored.status === 'queued') {
+            return {
+              ...restored,
+              status: 'stopped' as const,
+              phase: 'Stopped after browser reload.'
+            };
+          }
+          return restored;
+        })
+      : [];
 
-        scouts = restoredScouts.length ? restoredScouts : [createScout('scout-1', 1)];
-        selectedScoutId = parsed.selectedScoutId && scouts.some((scout) => scout.id === parsed.selectedScoutId)
-          ? parsed.selectedScoutId
-          : scouts[0].id;
-        return;
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Failed to restore workspace.', 'error');
+    scouts = restoredScouts.length ? restoredScouts : [createScout('scout-1', 1)];
+    selectedScoutId = parsed.selectedScoutId && scouts.some((scout) => scout.id === parsed.selectedScoutId)
+      ? parsed.selectedScoutId
+      : scouts[0].id;
+  }
+
+  async function loadWorkspace() {
+    const sessionWorkspace = readSessionWorkspace();
+    try {
+      const response = await fetch('/api/workspace');
+      const payload = (await response.json().catch(() => ({}))) as {
+        workspace?: PersistedWorkspace | null;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to load workspace file.');
       }
+
+      if (payload.workspace) {
+        applyWorkspace({
+          ...payload.workspace,
+          markidyApiKey: sessionWorkspace?.markidyApiKey || '',
+          aiApiKey: sessionWorkspace?.aiApiKey || ''
+        });
+        saveWorkspaceSession(workspaceSessionPayload());
+        if (!markidyApiKey || !aiApiKey) {
+          showToast('Workspace restored. Paste API keys to run scouts.', 'info', 6000);
+        }
+        return;
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to load workspace file.', 'error');
+    }
+
+    if (sessionWorkspace) {
+      applyWorkspace(sessionWorkspace);
+      return;
     }
 
     persistWorkspace();
@@ -356,17 +457,19 @@
 
   function createNewScout() {
     const scout = createScout(newScoutId(), scouts.length + 1);
-    patchScouts([...scouts, scout], 'New scout created.');
+    scouts = [...scouts, scout];
     selectedScoutId = scout.id;
     activeWorkspaceTab = 'scouts';
+    persistWorkspace('New scout created.');
   }
 
   function duplicateSelectedScout() {
     if (!selectedScout) return;
     const duplicated = duplicateScout(selectedScout, newScoutId(), scouts.map((scout) => scout.name));
-    patchScouts([...scouts, duplicated], 'Scout copied.');
+    scouts = [...scouts, duplicated];
     selectedScoutId = duplicated.id;
     activeWorkspaceTab = 'scouts';
+    persistWorkspace('Scout copied.');
   }
 
   function removeSelectedScout() {
