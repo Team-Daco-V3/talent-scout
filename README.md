@@ -104,9 +104,9 @@ Talent Scout saves completed reports as JSON files in the project `reports/` fol
 Talent Scout saves scout setup and non-secret app settings in `.talent-scout/workspace.json`.
 
 - Scout names, search criteria, selected AI provider, model, and API base URLs are restored after app restart.
-- The browser also keeps a local non-secret workspace backup so recent edits survive if the local server is stopped before the project file write completes.
-- Markidy API keys and AI provider API keys are not saved to this file.
-- API keys only stay in the current browser session and must be pasted again after the browser session ends.
+- The browser also keeps a local workspace backup so recent edits and Setup fields survive if the local server is stopped before the project file write completes.
+- Markidy API keys and AI provider API keys are not saved to this project file, report files, or a server database.
+- API keys are saved only in this browser's local storage so Setup can be restored after restarting the local app. Clear this site's browser data to remove them.
 - The `.talent-scout/` folder is ignored by git.
 
 ## What v1 Does
@@ -146,7 +146,7 @@ The UI asks for:
 
 The open-source MVP intentionally ships only these recommended presets. More providers can be added by extending `apps/web/src/lib/ai/providers.ts`.
 
-Save step stores settings in browser session storage, including API keys for the current browser session only. Keys are not stored in a server database by this app.
+Save stores scout setup in the project workspace file and keeps API keys only in this browser's local storage. Keys are not stored in a server database by this app.
 
 ## Search Behavior
 

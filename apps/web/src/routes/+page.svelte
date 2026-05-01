@@ -246,7 +246,9 @@
   function workspaceLocalPayload(payload = workspaceSessionPayload()): PersistedWorkspace {
     return {
       ...workspaceFilePayload(payload),
-      savedAt: new Date().toISOString()
+      savedAt: new Date().toISOString(),
+      markidyApiKey: payload.markidyApiKey,
+      aiApiKey: payload.aiApiKey
     };
   }
 
@@ -309,6 +311,17 @@
     saveWorkspaceSession(payload);
     saveWorkspaceLocal(payload);
     scheduleWorkspaceFileSave(payload, message);
+  }
+
+  async function persistWorkspaceNow(message?: string) {
+    const payload = workspaceSessionPayload();
+    saveWorkspaceSession(payload);
+    saveWorkspaceLocal(payload);
+    if (workspaceFileSaveTimer) {
+      clearTimeout(workspaceFileSaveTimer);
+      workspaceFileSaveTimer = null;
+    }
+    await saveWorkspaceFile(payload, message);
   }
 
   function showToast(message: string, kind: ToastKind = 'info', durationMs?: number) {
@@ -461,10 +474,15 @@
     const restoredWorkspace = newestWorkspace(fileWorkspace, localWorkspace) ?? sessionWorkspace;
 
     if (restoredWorkspace) {
+      const restoredMarkidyApiKey =
+        sessionWorkspace?.markidyApiKey || localWorkspace?.markidyApiKey || restoredWorkspace.markidyApiKey || '';
+      const restoredAiApiKey =
+        sessionWorkspace?.aiApiKey || localWorkspace?.aiApiKey || restoredWorkspace.aiApiKey || '';
+
       applyWorkspace({
         ...restoredWorkspace,
-        markidyApiKey: sessionWorkspace?.markidyApiKey || '',
-        aiApiKey: sessionWorkspace?.aiApiKey || ''
+        markidyApiKey: restoredMarkidyApiKey,
+        aiApiKey: restoredAiApiKey
       });
       const currentPayload = workspaceSessionPayload();
       saveWorkspaceSession(currentPayload);
@@ -505,7 +523,7 @@
   }
 
   function saveCurrentStep(message = 'Workspace saved.') {
-    persistWorkspace(message);
+    void persistWorkspaceNow(message);
   }
 
   function createNewScout() {
@@ -1465,13 +1483,13 @@
         </div>
 
         <div class="setup-footer">
-          <p>Keys stay in browser session storage. They are sent only when a scout run calls the local API route.</p>
+          <p>Keys are saved in this browser's local storage and sent only when a scout run calls the local API route.</p>
           <button
             class="primary-button"
             type="button"
             on:click={() => {
               activeWorkspaceTab = 'scouts';
-              persistWorkspace('Setup saved.');
+              void persistWorkspaceNow('Setup saved.');
             }}
           >
             Continue to scouts
