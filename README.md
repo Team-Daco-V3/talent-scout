@@ -48,7 +48,7 @@ chmod +x start-talent-scout-macos-linux.sh
 ./start-talent-scout-macos-linux.sh
 ```
 
-The launcher checks for Node.js, installs dependencies when `node_modules` is missing, and starts Talent Scout at `http://localhost:50224`.
+The launcher checks for Node.js, installs dependencies when `node_modules` is missing, stops an existing Node process on port `17300`, and starts Talent Scout at `http://localhost:17300`.
 
 ### Option 2: Use the terminal
 
@@ -67,7 +67,7 @@ npm run start
 The app opens in your browser at:
 
 ```text
-http://localhost:50224
+http://localhost:17300
 ```
 
 If you are using Windows PowerShell and `npm` is blocked, use:
@@ -81,7 +81,7 @@ Stop the local server with `Ctrl+C` in the terminal.
 
 ## First Run
 
-1. Open `http://localhost:50224`.
+1. Open `http://localhost:17300`.
 2. Enter the Markidy API URL. The default is `https://api.markidy.com`.
 3. Paste your Markidy API key.
 4. Choose an AI provider and paste that provider's API key.
@@ -163,7 +163,7 @@ For a public hosted deployment, do not treat user-provided keys casually. A host
 ## Scripts
 
 ```bash
-npm run start   # run locally at http://localhost:50224
+npm run start   # run locally at http://localhost:17300
 npm run dev     # run Vite with the default development port
 npm run build   # build the app
 npm run check   # run Svelte and TypeScript checks

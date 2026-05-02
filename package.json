@@ -9,7 +9,7 @@
     "apps/web"
   ],
   "scripts": {
-    "start": "npm run dev -w apps/web -- --host 127.0.0.1 --port 50224 --open",
+    "start": "npm run dev -w apps/web -- --host 127.0.0.1 --port 17300 --open",
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
     "check": "npm run check -w apps/web",

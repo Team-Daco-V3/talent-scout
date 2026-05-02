@@ -1,5 +1,7 @@
 @echo off
 setlocal
+set "PORT=17300"
+set "TALENT_SCOUT_PORT=%PORT%"
 
 cd /d "%~dp0"
 
@@ -28,7 +30,13 @@ if not exist "node_modules" (
   )
 )
 
-echo Starting Talent Scout at http://localhost:50224 ...
+call powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$port=[int]$env:TALENT_SCOUT_PORT; $listeners=@(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue); foreach ($listener in $listeners) { $proc=Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue; if ($proc -and $proc.ProcessName -eq 'node') { Write-Host ('Stopping existing Node process on port {0}: PID {1}' -f $port,$proc.Id); Stop-Process -Id $proc.Id -Force } elseif ($proc) { Write-Host ('Port {0} is already used by {1} (PID {2}). Close it manually or choose another port.' -f $port,$proc.ProcessName,$proc.Id); exit 2 } else { Write-Host ('Port {0} is already used by PID {1}. Close it manually or choose another port.' -f $port,$listener.OwningProcess); exit 2 } }; Start-Sleep -Milliseconds 500"
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
+echo Starting Talent Scout at http://localhost:%PORT% ...
 call npm.cmd run start
 
 pause
